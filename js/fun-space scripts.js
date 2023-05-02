@@ -1,6 +1,3 @@
-<!-- 
-      3D Portfolio Cards
-     -->
 $('.section-works__item').click(event=>{
     if($(event.currentTarget).hasClass('active')){
       
