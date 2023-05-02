@@ -1,477 +1,439 @@
-var Colors = {
-    red: 0xf25346,
-    white: 0xd8d0d1,
-    brown: 0x59332e,
-    pink: 0xf5986E,
-    brownDark: 0x23190f,
-    blue: 0x68c3c0
-  };
+
+//THREEJS RELATED VARIABLES 
+
+var scene,
+    camera, fieldOfView, aspectRatio, nearPlane, farPlane,
+    gobalLight, shadowLight, backLight,
+    renderer,
+    container,
+    controls;
+
+//SCREEN & MOUSE VARIABLES
+
+var HEIGHT, WIDTH, windowHalfX, windowHalfY,
+    mousePos = { x: 0, y: 0 },
+    oldMousePos = {x:0, y:0},
+    ballWallDepth = 28;
+
+
+//3D OBJECTS VARIABLES
+
+var hero;
+
+//INIT THREE JS, SCREEN AND MOUSE EVENTS
+
+function initScreenAnd3D() {
   
-  window.addEventListener('load', init, false);
-  
-  function init() {
-    createScene();
-    createLights();
-    createPlane();
-    createSea();
-    createSky();
-  
-    document.addEventListener('mousemove', handleMouseMove, false);
-  
-    loop();
-  }
-  
-  var scene,
-    camera, fieldOfView, aspectRatio, nearPlane, farPlane, HEIGHT, WIDTH,
-    renderer, container,
-    hemisphereLight, shadowLight;
-  
-  function createScene() {
-    // Get the width and the height of the screen,
-    // use them to set up the aspect ratio of the camera 
-    // and the size of the renderer.
-    HEIGHT = window.innerHeight;
-    WIDTH = window.innerWidth;
-  
-    // Create the scene
-    scene = new THREE.Scene();
-  
-    // Add a fog effect to the scene; same color as the
-    // background color used in the style sheet
-    scene.fog = new THREE.Fog(0xf7d9aa, 100, 950);
-  
-    // Create the camera
-    aspectRatio = WIDTH / HEIGHT;
-    fieldOfView = 60;
-    nearPlane = 1;
-    farPlane = 950;
-    camera = new THREE.PerspectiveCamera(
-      fieldOfView,
-      aspectRatio,
-      nearPlane,
-      farPlane
+  HEIGHT = window.innerHeight;
+  WIDTH = window.innerWidth;
+  windowHalfX = WIDTH / 2;
+  windowHalfY = HEIGHT / 2;
+
+  scene = new THREE.Scene();
+  aspectRatio = WIDTH / HEIGHT;
+  fieldOfView = 50;
+  nearPlane = 1;
+  farPlane = 2000;
+  camera = new THREE.PerspectiveCamera(
+    fieldOfView,
+    aspectRatio,
+    nearPlane,
+    farPlane
     );
+  camera.position.x = 0;
+  camera.position.z = 300;
+  camera.position.y = 250;
+  camera.lookAt(new THREE.Vector3(0, 60, 0));
+
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setPixelRatio( window.devicePixelRatio );
+  renderer.setSize(WIDTH, HEIGHT);
+  renderer.shadowMapEnabled = true;
   
-    // Set the position of the camera
-    camera.position.x = 0;
-    camera.position.z = 200;
-    camera.position.y = 100;
+  container = document.getElementById('world');
+  container.appendChild(renderer.domElement);
   
-    // Create the renderer
-    renderer = new THREE.WebGLRenderer({
-      // Allow transparency to show the gradient background
-      // we defined in the CSS
-      alpha: true,
+  window.addEventListener('resize', handleWindowResize, false);
+  document.addEventListener('mousemove', handleMouseMove, false);
+  document.addEventListener('touchmove', handleTouchMove, false);
   
-      // Activate the anti-aliasing; this is less performant,
-      // but, as our project is low-poly based, it should be fine :)
-      antialias: true
-    });
-  
-    // Define the size of the renderer; in this case,
-    // it will fill the entire screen
-    renderer.setSize(WIDTH, HEIGHT);
-  
-    // Enable shadow rendering
-    renderer.shadowMap.enabled = true;
-  
-    // Add the DOM element of the renderer to the 
-    // container we created in the HTML
-    container = document.getElementById('world');
-    container.appendChild(renderer.domElement);
-  
-    // Listen to the screen: if the user resizes it
-    // we have to update the camera and the renderer size
-    window.addEventListener('resize', handleWindowResize, false);
+  /*
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.minPolarAngle = -Math.PI / 2; 
+  controls.maxPolarAngle = Math.PI / 2;
+  controls.noZoom = true;
+  controls.noPan = true;
+  //*/
+
+
+}
+
+function handleWindowResize() {
+  HEIGHT = window.innerHeight;
+  WIDTH = window.innerWidth;
+  windowHalfX = WIDTH / 2;
+  windowHalfY = HEIGHT / 2;
+  renderer.setSize(WIDTH, HEIGHT);
+  camera.aspect = WIDTH / HEIGHT;
+  camera.updateProjectionMatrix();
+}
+
+function handleMouseMove(event) {
+  mousePos = {x:event.clientX, y:event.clientY};
+} 
+
+function handleTouchMove(event) {
+  if (event.touches.length == 1) {
+    event.preventDefault();
+    mousePos = {x:event.touches[0].pageX, y:event.touches[0].pageY};
   }
-  var mousePos = {
-    x: 0,
-    y: 0
-  };
-  
-  // now handle the mousemove event
-  function handleMouseMove(event) {
-  
-    // here we are converting the mouse position value received 
-    // to a normalized value varying between -1 and 1;
-    // this is the formula for the horizontal axis:
-  
-    var tx = -1 + (event.clientX / WIDTH) * 2;
-  
-    // for the vertical axis, we need to inverse the formula 
-    // because the 2D y-axis goes the opposite direction of the 3D y-axis
-  
-    var ty = 1 - (event.clientY / HEIGHT) * 2;
-    mousePos = {
-      x: tx,
-      y: ty
-    };
-  
-  }
-  
-  function handleWindowResize() {
-    // update height and width of the renderer and the camera
-    HEIGHT = window.innerHeight;
-    WIDTH = window.innerWidth;
-    renderer.setSize(WIDTH, HEIGHT);
-    camera.aspect = WIDTH / HEIGHT;
-    camera.updateProjectionMatrix();
-  }
-  
-  function createLights() {
-    // A hemisphere light is a gradient colored light; 
-    // the first parameter is the sky color, the second parameter is the ground color, 
-    // the third parameter is the intensity of the light
-    hemisphereLight = new THREE.HemisphereLight(0xaaaaaa, 0x000000, .9);
-  
-    // an ambient light modifies the global color of a scene and makes the shadows softer
-    ambientLight = new THREE.AmbientLight(0xdc8874, .5);
-    scene.add(ambientLight);
-  
-    // A directional light shines from a specific direction. 
-    // It acts like the sun, that means that all the rays produced are parallel. 
-    shadowLight = new THREE.DirectionalLight(0xffffff, .9);
-  
-    // Set the direction of the light  
-    shadowLight.position.set(150, 350, 350);
-  
-    // Allow shadow casting 
-    shadowLight.castShadow = true;
-  
-    // define the visible area of the projected shadow
-    shadowLight.shadow.camera.left = -400;
-    shadowLight.shadow.camera.right = 400;
-    shadowLight.shadow.camera.top = 400;
-    shadowLight.shadow.camera.bottom = -400;
-    shadowLight.shadow.camera.near = 1;
-    shadowLight.shadow.camera.far = 1000;
-  
-    // define the resolution of the shadow; the higher the better, 
-    // but also the more expensive and less performant
-    shadowLight.shadow.mapSize.width = 2048;
-    shadowLight.shadow.mapSize.height = 2048;
-  
-    // to activate the lights, just add them to the scene
-    scene.add(hemisphereLight);
-    scene.add(shadowLight);
-  }
-  
-  // First let's define a Sea object :
-  Sea = function() {
-    var geom = new THREE.CylinderGeometry(600, 600, 800, 40, 10);
-    geom.applyMatrix(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
-  
-    // important: by merging vertices we ensure the continuity of the waves
-    geom.mergeVertices();
-  
-    // get the vertices
-    var l = geom.vertices.length;
-  
-    // create an array to store new data associated to each vertex
-    this.waves = [];
-  
-    for (var i = 0; i < l; i++) {
-      // get each vertex
-      var v = geom.vertices[i];
-  
-      // store some data associated to it
-      this.waves.push({
-        y: v.y,
-        x: v.x,
-        z: v.z,
-        // a random angle
-        ang: Math.random() * Math.PI * 2,
-        // a random distance
-        amp: 5 + Math.random() * 15,
-        // a random speed between 0.016 and 0.048 radians / frame
-        speed: 0.016 + Math.random() * 0.032
-      });
-    };
-    var mat = new THREE.MeshPhongMaterial({
-      color: Colors.blue,
-      transparent: true,
-      opacity: .8,
-      shading: THREE.FlatShading,
-    });
-  
-    this.mesh = new THREE.Mesh(geom, mat);
-    this.mesh.receiveShadow = true;
-  
-  }
-  
-  // now we create the function that will be called in each frame 
-  // to update the position of the vertices to simulate the waves
-  
-  Sea.prototype.moveWaves = function() {
-  
-    // get the vertices
-    var verts = this.mesh.geometry.vertices;
-    var l = verts.length;
-  
-    for (var i = 0; i < l; i++) {
-      var v = verts[i];
-  
-      // get the data associated to it
-      var vprops = this.waves[i];
-  
-      // update the position of the vertex
-      v.x = vprops.x + Math.cos(vprops.ang) * vprops.amp;
-      v.y = vprops.y + Math.sin(vprops.ang) * vprops.amp;
-  
-      // increment the angle for the next frame
-      vprops.ang += vprops.speed;
-  
-    }
-  
-    // Tell the renderer that the geometry of the sea has changed.
-    // In fact, in order to maintain the best level of performance, 
-    // three.js caches the geometries and ignores any changes
-    // unless we add this line
-    this.mesh.geometry.verticesNeedUpdate = true;
-  
-    sea.mesh.rotation.z += .005;
-  }
-  
-  // Instantiate the sea and add it to the scene:
-  
-  var sea;
-  
-  function createSea() {
-    sea = new Sea();
-  
-    // push it a little bit at the bottom of the scene
-    sea.mesh.position.y = -600;
-  
-    // add the mesh of the sea to the scene
-    scene.add(sea.mesh);
-  }
-  
-  Cloud = function() {
-    // Create an empty container that will hold the different parts of the cloud
-    this.mesh = new THREE.Object3D();
-  
-    // create a cube geometry;
-    // this shape will be duplicated to create the cloud
-    var geom = new THREE.BoxGeometry(20, 20, 20);
-  
-    // create a material; a simple white material will do the trick
-    var mat = new THREE.MeshPhongMaterial({
-      color: Colors.white,
-    });
-  
-    // duplicate the geometry a random number of times
-    var nBlocs = 3 + Math.floor(Math.random() * 3);
-    for (var i = 0; i < nBlocs; i++) {
-  
-      // create the mesh by cloning the geometry
-      var m = new THREE.Mesh(geom, mat);
-  
-      // set the position and the rotation of each cube randomly
-      m.position.x = i * 15;
-      m.position.y = Math.random() * 10;
-      m.position.z = Math.random() * 10;
-      m.rotation.z = Math.random() * Math.PI * 2;
-      m.rotation.y = Math.random() * Math.PI * 2;
-  
-      // set the size of the cube randomly
-      var s = .1 + Math.random() * .9;
-      m.scale.set(s, s, s);
-  
-      // allow each cube to cast and to receive shadows
-      m.castShadow = true;
-      m.receiveShadow = true;
-  
-      // add the cube to the container we first created
-      this.mesh.add(m);
-    }
-  }
-  
-  // Define a Sky Object
-  Sky = function() {
-    // Create an empty container
-    this.mesh = new THREE.Object3D();
-  
-    // choose a number of clouds to be scattered in the sky
-    this.nClouds = 20;
-  
-    // To distribute the clouds consistently,
-    // we need to place them according to a uniform angle
-    var stepAngle = Math.PI * 2 / this.nClouds;
-  
-    // create the clouds
-    for (var i = 0; i < this.nClouds; i++) {
-      var c = new Cloud();
-  
-      // set the rotation and the position of each cloud;
-      // for that we use a bit of trigonometry
-      var a = stepAngle * i; // this is the final angle of the cloud
-      var h = 750 + Math.random() * 200; // this is the distance between the center of the axis and the cloud itself
-  
-      // Trigonometry!!! I hope you remember what you've learned in Math :)
-      // in case you don't: 
-      // we are simply converting polar coordinates (angle, distance) into Cartesian coordinates (x, y)
-      c.mesh.position.y = Math.sin(a) * h;
-      c.mesh.position.x = Math.cos(a) * h;
-  
-      // rotate the cloud according to its position
-      c.mesh.rotation.z = a + Math.PI / 2;
-  
-      // for a better result, we position the clouds 
-      // at random depths inside of the scene
-      c.mesh.position.z = -400 - Math.random() * 400;
-  
-      // we also set a random scale for each cloud
-      var s = 1 + Math.random() * 2;
-      c.mesh.scale.set(s, s, s);
-  
-      // do not forget to add the mesh of each cloud in the scene
-      this.mesh.add(c.mesh);
-    }
-  }
-  
-  // Now we instantiate the sky and push its center a bit
-  // towards the bottom of the screen
-  
-  var sky;
-  
-  function createSky() {
-    sky = new Sky();
-    sky.mesh.position.y = -600;
-    scene.add(sky.mesh);
-  }
-  
-  var AirPlane = function() {
-  
-    this.mesh = new THREE.Object3D();
-  
-    // Create the cabin
-    var geomCockpit = new THREE.BoxGeometry(60, 50, 50, 1, 1, 1);
-    var matCockpit = new THREE.MeshPhongMaterial({
-      color: Colors.red,
-      shading: THREE.FlatShading
-    });
-    // we can access a specific vertex of a shape through 
-    // the vertices array, and then move its x, y and z property:
-    geomCockpit.vertices[4].y -= 10;
-    geomCockpit.vertices[4].z += 20;
-    geomCockpit.vertices[5].y -= 10;
-    geomCockpit.vertices[5].z -= 20;
-    geomCockpit.vertices[6].y += 30;
-    geomCockpit.vertices[6].z += 20;
-    geomCockpit.vertices[7].y += 30;
-    geomCockpit.vertices[7].z -= 20;
-  
-    var cockpit = new THREE.Mesh(geomCockpit, matCockpit);
-    cockpit.castShadow = true;
-    cockpit.receiveShadow = true;
-    this.mesh.add(cockpit);
-  
-    // Create the engine
-    var geomEngine = new THREE.BoxGeometry(20, 50, 50, 1, 1, 1);
-    var matEngine = new THREE.MeshPhongMaterial({
-      color: Colors.white,
-      shading: THREE.FlatShading
-    });
-    var engine = new THREE.Mesh(geomEngine, matEngine);
-    engine.position.x = 40;
-    engine.castShadow = true;
-    engine.receiveShadow = true;
-    this.mesh.add(engine);
-  
-    // Create the tail
-    var geomTailPlane = new THREE.BoxGeometry(15, 20, 5, 1, 1, 1);
-    var matTailPlane = new THREE.MeshPhongMaterial({
-      color: Colors.red,
-      shading: THREE.FlatShading
-    });
-    var tailPlane = new THREE.Mesh(geomTailPlane, matTailPlane);
-    tailPlane.position.set(-35, 25, 0);
-    tailPlane.castShadow = true;
-    tailPlane.receiveShadow = true;
-    this.mesh.add(tailPlane);
-  
-    // Create the wing
-    var geomSideWing = new THREE.BoxGeometry(40, 8, 150, 1, 1, 1);
-    var matSideWing = new THREE.MeshPhongMaterial({
-      color: Colors.red,
-      shading: THREE.FlatShading
-    });
-    var sideWing = new THREE.Mesh(geomSideWing, matSideWing);
-    sideWing.castShadow = true;
-    sideWing.receiveShadow = true;
-    this.mesh.add(sideWing);
-  
-    // propeller
-    var geomPropeller = new THREE.BoxGeometry(20, 10, 10, 1, 1, 1);
-    var matPropeller = new THREE.MeshPhongMaterial({
-      color: Colors.brown,
-      shading: THREE.FlatShading
-    });
-    this.propeller = new THREE.Mesh(geomPropeller, matPropeller);
-    this.propeller.castShadow = true;
-    this.propeller.receiveShadow = true;
-  
-    // blades
-    var geomBlade = new THREE.BoxGeometry(1, 100, 20, 1, 1, 1);
-    var matBlade = new THREE.MeshPhongMaterial({
-      color: Colors.brownDark,
-      shading: THREE.FlatShading
-    });
-  
-    var blade = new THREE.Mesh(geomBlade, matBlade);
-    blade.position.set(8, 0, 0);
-    blade.castShadow = true;
-    blade.receiveShadow = true;
-    this.propeller.add(blade);
-    this.propeller.position.set(50, 0, 0);
-    this.mesh.add(this.propeller);
-  };
-  var airplane;
-  
-  function createPlane() {
-    airplane = new AirPlane();
-    airplane.mesh.scale.set(.25, .25, .25);
-    airplane.mesh.position.y = 100;
-    scene.add(airplane.mesh);
-  }
-  
-  function loop() {
-    // Rotate the propeller, the sea and the sky
-    airplane.propeller.rotation.x += 0.3;
-    sea.mesh.rotation.z += .005;
-    sky.mesh.rotation.z += .01;
-  
-    // update the plane on each frame
-    updatePlane();
-    sea.moveWaves();
-  
-    // render the scene
-    renderer.render(scene, camera);
-  
-    // call the loop function again
-    requestAnimationFrame(loop);
-  }
-  
-  function updatePlane() {
-  
-    var targetY = normalize(mousePos.y, -.75, .75, 25, 175);
-    var targetX = normalize(mousePos.x, -.75, .75, -100, 100);
-  
-    // Move the plane at each frame by adding a fraction of the remaining distance
-    airplane.mesh.position.y += (targetY - airplane.mesh.position.y) * 0.1;
-  
-    // Rotate the plane proportionally to the remaining distance
-    airplane.mesh.rotation.z = (targetY - airplane.mesh.position.y) * 0.0128;
-    airplane.mesh.rotation.x = (airplane.mesh.position.y - targetY) * 0.0064;
-  
-    airplane.propeller.rotation.x += 0.3;
-  }
-  
-  function normalize(v, vmin, vmax, tmin, tmax) {
-    var nv = Math.max(Math.min(v, vmax), vmin);
-    var dv = vmax - vmin;
-    var pc = (nv - vmin) / dv;
-    var dt = tmax - tmin;
-    var tv = tmin + (pc * dt);
-    return tv;
-  }
+}
+
+function createLights() {
+  globalLight = new THREE.HemisphereLight(0xffffff, 0xffffff, .5)
+  
+  shadowLight = new THREE.DirectionalLight(0xffffff, .9);
+  shadowLight.position.set(200, 200, 200);
+  shadowLight.castShadow = true;
+  shadowLight.shadowDarkness = .2;
+  shadowLight.shadowMapWidth = shadowLight.shadowMapHeight = 2048;
+  
+  backLight = new THREE.DirectionalLight(0xffffff, .4);
+  backLight.position.set(-100, 100, 100);
+  backLight.castShadow = true;
+  backLight.shadowDarkness = .1;
+  backLight.shadowMapWidth = shadowLight.shadowMapHeight = 2048;
+  
+  scene.add(globalLight);
+  scene.add(shadowLight);
+  scene.add(backLight);
+}
+
+function createFloor(){ 
+  floor = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000,1000), new THREE.MeshBasicMaterial({color: 0x6ecccc}));
+  floor.rotation.x = -Math.PI/2;
+  floor.position.y = 0;
+  floor.receiveShadow = true;
+  scene.add(floor);
+}
+
+function createHero() {
+  hero = new Cat();
+  scene.add(hero.threeGroup);
+}
+
+function createBall() {
+  ball = new Ball();
+  scene.add(ball.threeGroup);
+}
+
+// BALL RELATED CODE
+
+
+var woolNodes = 10,
+	woolSegLength = 2,
+	gravity = -.8,
+	accuracy =1;
+
+
+Ball = function(){
+
+	var redMat = new THREE.MeshLambertMaterial ({
+	    color: 0x630d15, 
+	    shading:THREE.FlatShading
+	});
+
+	var stringMat = new THREE.LineBasicMaterial({
+    	color: 0x630d15,
+    	linewidth: 3
+	});
+
+	this.threeGroup = new THREE.Group();
+	this.ballRay = 8;
+
+	this.verts = [];
+
+	// string
+	var stringGeom = new THREE.Geometry();
+
+	for (var i=0; i< woolNodes; i++	){
+		var v = new THREE.Vector3(0, -i*woolSegLength, 0);
+		stringGeom.vertices.push(v);
+
+		var woolV = new WoolVert();
+		woolV.x = woolV.oldx = v.x;
+		woolV.y = woolV.oldy = v.y;
+		woolV.z = 0;
+		woolV.fx = woolV.fy = 0;
+		woolV.isRootNode = (i==0);
+		woolV.vertex = v;
+		if (i > 0) woolV.attach(this.verts[(i - 1)]);
+		this.verts.push(woolV);
+		
+	}
+  	this.string = new THREE.Line(stringGeom, stringMat);
+
+  	// body
+  	var bodyGeom = new THREE.SphereGeometry(this.ballRay, 5,4);
+	this.body = new THREE.Mesh(bodyGeom, redMat);
+  	this.body.position.y = -woolSegLength*woolNodes;
+
+  	var wireGeom = new THREE.TorusGeometry( this.ballRay, .5, 3, 10, Math.PI*2 );
+  	this.wire1 = new THREE.Mesh(wireGeom, redMat);
+  	this.wire1.position.x = 1;
+  	this.wire1.rotation.x = -Math.PI/4;
+
+  	this.wire2 = this.wire1.clone();
+  	this.wire2.position.y = 1;
+  	this.wire2.position.x = -1;
+  	this.wire1.rotation.x = -Math.PI/4 + .5;
+  	this.wire1.rotation.y = -Math.PI/6;
+
+  	this.wire3 = this.wire1.clone();
+  	this.wire3.rotation.x = -Math.PI/2 + .3;
+
+  	this.wire4 = this.wire1.clone();
+  	this.wire4.position.x = -1;
+  	this.wire4.rotation.x = -Math.PI/2 + .7;
+
+  	this.wire5 = this.wire1.clone();
+  	this.wire5.position.x = 2;
+  	this.wire5.rotation.x = -Math.PI/2 + 1;
+
+  	this.wire6 = this.wire1.clone();
+  	this.wire6.position.x = 2;
+  	this.wire6.position.z = 1;
+  	this.wire6.rotation.x = 1;
+
+  	this.wire7 = this.wire1.clone();
+  	this.wire7.position.x = 1.5;
+  	this.wire7.rotation.x = 1.1;
+
+  	this.wire8 = this.wire1.clone();
+  	this.wire8.position.x = 1;
+  	this.wire8.rotation.x = 1.3;
+
+  	this.wire9 = this.wire1.clone();
+  	this.wire9.scale.set(1.2,1.1,1.1);
+  	this.wire9.rotation.z = Math.PI/2;
+  	this.wire9.rotation.y = Math.PI/2;
+  	this.wire9.position.y = 1;
+  	
+  	this.body.add(this.wire1);
+  	this.body.add(this.wire2);
+  	this.body.add(this.wire3);
+  	this.body.add(this.wire4);
+  	this.body.add(this.wire5);
+  	this.body.add(this.wire6);
+  	this.body.add(this.wire7);
+  	this.body.add(this.wire8);
+  	this.body.add(this.wire9);
+
+  	this.threeGroup.add(this.string);
+	this.threeGroup.add(this.body);
+
+	this.threeGroup.traverse( function ( object ) {
+    if ( object instanceof THREE.Mesh ) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }});
+
+}
+
+/* 
+The next part of the code is largely inspired by this codepen :
+https://codepen.io/dissimulate/pen/KrAwx?editors=001
+thanks to dissimulate for his great work
+*/
+
+/*
+Copyright (c) 2013 dissimulate at Codepen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+
+
+
+WoolVert = function(){
+	this.x = 0;
+	this.y = 0;
+	this.z = 0;
+	this.oldx = 0;
+	this.oldy = 0;
+	this.fx = 0;
+	this.fy = 0;
+	this.isRootNode = false;
+	this.constraints = [];
+	this.vertex = null;
+}
+
+
+WoolVert.prototype.update = function(){
+	var wind = 0;//.1+Math.random()*.5;
+  	this.add_force(wind, gravity);
+
+  	nx = this.x + ((this.x - this.oldx)*.9) + this.fx;
+  	ny = this.y + ((this.y - this.oldy)*.9) + this.fy;
+  	this.oldx = this.x;
+  	this.oldy = this.y;
+  	this.x = nx;
+  	this.y = ny;
+
+  	this.vertex.x = this.x;
+  	this.vertex.y = this.y;
+  	this.vertex.z = this.z;
+
+  	this.fy = this.fx = 0
+}
+
+WoolVert.prototype.attach = function(point) {
+  this.constraints.push(new Constraint(this, point));
+};
+
+WoolVert.prototype.add_force = function(x, y) {
+  this.fx += x;
+  this.fy += y;
+};
+
+Constraint = function(p1, p2) {
+  this.p1 = p1;
+  this.p2 = p2;
+  this.length = woolSegLength;
+};
+
+Ball.prototype.update = function(posX, posY, posZ){
+		
+	var i = accuracy;
+	
+	while (i--) {
+		
+		var nodesCount = woolNodes;
+		
+		while (nodesCount--) {
+		
+			var v = this.verts[nodesCount];
+			
+			if (v.isRootNode) {
+			    v.x = posX;
+			    v.y = posY;
+			    v.z = posZ;
+			}
+		
+			else {
+		
+				var constraintsCount = v.constraints.length;
+		  		
+		  		while (constraintsCount--) {
+		  			
+		  			var c = v.constraints[constraintsCount];
+
+		  			var diff_x = c.p1.x - c.p2.x,
+					    diff_y = c.p1.y - c.p2.y,
+					    dist = Math.sqrt(diff_x * diff_x + diff_y * diff_y),
+					    diff = (c.length - dist) / dist;
+
+				  	var px = diff_x * diff * .5;
+				  	var py = diff_y * diff * .5;
+
+				  	c.p1.x += px;
+				  	c.p1.y += py;
+				  	c.p2.x -= px;
+				  	c.p2.y -= py;
+				  	c.p1.z = c.p2.z = posZ;
+		  		}
+
+		  		if (nodesCount == woolNodes-1){
+		  			this.body.position.x = this.verts[nodesCount].x;
+					this.body.position.y = this.verts[nodesCount].y;
+					this.body.position.z = this.verts[nodesCount].z;
+
+					this.body.rotation.z += (v.y <= this.ballRay)? (v.oldx-v.x)/10 : Math.min(Math.max( diff_x/2, -.1 ), .1);
+		  		}
+		  	}
+		  	
+		  	if (v.y < this.ballRay) {
+		  		v.y = this.ballRay;
+		  	}
+		}
+	}
+
+	nodesCount = woolNodes;
+	while (nodesCount--) this.verts[nodesCount].update();
+
+	this.string.geometry.verticesNeedUpdate = true;
+
+	
+}
+
+Ball.prototype.receivePower = function(tp){
+	this.verts[woolNodes-1].add_force(tp.x, tp.y);
+}
+
+// Enf of the code inspired by dissmulate
+
+
+// Make everything work together :
+
+var t=0;
+
+function loop(){
+  render();
+  
+  t+=.05;
+  hero.updateTail(t);
+
+  var ballPos = getBallPos();
+  ball.update(ballPos.x,ballPos.y, ballPos.z);
+  ball.receivePower(hero.transferPower);
+  hero.interactWithBall(ball.body.position);
+
+  requestAnimationFrame(loop);
+}
+
+
+function getBallPos(){
+  var vector = new THREE.Vector3();
+
+  vector.set(
+      ( mousePos.x / window.innerWidth ) * 2 - 1, 
+      - ( mousePos.y / window.innerHeight ) * 2 + 1,
+      0.1 );
+
+  vector.unproject( camera );
+  var dir = vector.sub( camera.position ).normalize();
+  var distance = (ballWallDepth - camera.position.z) / dir.z;
+  var pos = camera.position.clone().add( dir.multiplyScalar( distance ) );
+  return pos;
+}
+
+function render(){
+  if (controls) controls.update();
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('load', init, false);
+
+function init(event){
+  initScreenAnd3D();
+  createLights();
+  createFloor()
+  createHero();
+  createBall();
+  loop();
+}
